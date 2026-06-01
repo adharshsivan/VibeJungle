@@ -753,20 +753,150 @@ export function isRunning() {
 
 // ------ Radio & Effects ------
 let radioAudio: HTMLAudioElement | null = null;
-let radioNode: MediaElementAudioSourceNode | null = null;
-let radioFilters: { hp: BiquadFilterNode; lp: BiquadFilterNode; reverbBlock: GainNode } | null =
+const radioNode: MediaElementAudioSourceNode | null = null;
+const radioFilters: { hp: BiquadFilterNode; lp: BiquadFilterNode; reverbBlock: GainNode } | null =
   null;
-let radioReverb: ConvolverNode | null = null;
-let radioGain: GainNode | null = null;
+const radioReverb: ConvolverNode | null = null;
+const radioGain: GainNode | null = null;
 
 let retroNoiseNode: AudioBufferSourceNode | null = null;
 let retroNoiseGain: GainNode | null = null;
 let retroHumNode: OscillatorNode | null = null;
 let retroHumGain: GainNode | null = null;
 
+export let activeLpFreq = 20000;
+export let activeHpFreq = 20;
+export let activeReverbWet = 0;
+export let activeStaticVol = 0;
+export let activeHumVol = 0;
+
+export function setLiveFeature(
+  param: "cutoff" | "resonance" | "reverb" | "static" | "hum",
+  val: number,
+) {
+  const c = getCtx();
+  const now = c.currentTime;
+
+  if (param === "cutoff") {
+    activeLpFreq = val;
+    if (masterFX) {
+      masterFX.lp.frequency.cancelScheduledValues(now);
+      masterFX.lp.frequency.exponentialRampToValueAtTime(Math.max(40, val), now + 0.1);
+    }
+  } else if (param === "resonance") {
+    activeHpFreq = val;
+    if (masterFX) {
+      masterFX.hp.frequency.cancelScheduledValues(now);
+      masterFX.hp.frequency.exponentialRampToValueAtTime(Math.max(10, val), now + 0.1);
+    }
+  } else if (param === "reverb") {
+    activeReverbWet = val;
+    if (masterFX) {
+      masterFX.reverbBlock.gain.cancelScheduledValues(now);
+      masterFX.reverbBlock.gain.linearRampToValueAtTime(val, now + 0.1);
+    }
+  } else if (param === "static") {
+    activeStaticVol = val;
+    if (retroNoiseGain) {
+      retroNoiseGain.gain.cancelScheduledValues(now);
+      retroNoiseGain.gain.linearRampToValueAtTime(val, now + 0.1);
+    } else if (val > 0) {
+      try {
+        retroNoiseGain = c.createGain();
+        retroNoiseGain.gain.setValueAtTime(0, now);
+        retroNoiseGain.connect(c.destination);
+
+        const src = c.createBufferSource();
+        src.buffer = getPink();
+        const filt = c.createBiquadFilter();
+        filt.type = "lowpass";
+        filt.frequency.setValueAtTime(750, now);
+
+        src.connect(filt).connect(retroNoiseGain);
+        src.loop = true;
+        src.start(now);
+        retroNoiseNode = src;
+
+        retroNoiseGain.gain.linearRampToValueAtTime(val, now + 0.1);
+      } catch (e) {
+        console.error("Failed to dynamically start live static noise:", e);
+      }
+    }
+  } else if (param === "hum") {
+    activeHumVol = val;
+    if (retroHumGain) {
+      retroHumGain.gain.cancelScheduledValues(now);
+      retroHumGain.gain.linearRampToValueAtTime(val, now + 0.1);
+    } else if (val > 0) {
+      try {
+        retroHumGain = c.createGain();
+        retroHumGain.gain.setValueAtTime(0, now);
+        retroHumGain.connect(c.destination);
+
+        const osc = c.createOscillator();
+        osc.type = "sine";
+        osc.frequency.setValueAtTime(60, now);
+        osc.connect(retroHumGain);
+        osc.start(now);
+        retroHumNode = osc;
+
+        retroHumGain.gain.linearRampToValueAtTime(val, now + 0.1);
+      } catch (e) {
+        console.error("Failed to dynamically start live power hum:", e);
+      }
+    }
+  }
+}
+
 export function updateRetroSimulation(active: boolean, effect: string, masterVol: number = 1.0) {
   const c = getCtx();
   const now = c.currentTime;
+
+  // Sync default levels to custom state variables for React trackers on preset change
+  switch (effect) {
+    case "NORMAL":
+      activeHpFreq = 20;
+      activeLpFreq = 20000;
+      activeReverbWet = 0;
+      activeStaticVol = 0;
+      activeHumVol = 0;
+      break;
+    case "DISTANT":
+      activeHpFreq = 450;
+      activeLpFreq = 1400;
+      activeReverbWet = 0.55;
+      activeStaticVol = 0.03 * masterVol;
+      activeHumVol = 0.008 * masterVol;
+      break;
+    case "TV":
+      activeHpFreq = 550;
+      activeLpFreq = 2800;
+      activeReverbWet = 0.12;
+      activeStaticVol = 0.06 * masterVol;
+      activeHumVol = 0.015 * masterVol;
+      break;
+    case "MUFFLED":
+      activeHpFreq = 40;
+      activeLpFreq = 380;
+      activeReverbWet = 0.05;
+      activeStaticVol = 0.02 * masterVol;
+      activeHumVol = 0.012 * masterVol;
+      break;
+    case "REVERB":
+      activeHpFreq = 100;
+      activeLpFreq = 7500;
+      activeReverbWet = 0.85;
+      activeStaticVol = 0.008 * masterVol;
+      activeHumVol = 0;
+      break;
+    case "STATIC":
+      activeHpFreq = 750;
+      activeLpFreq = 3800;
+      activeReverbWet = 0.15;
+      activeStaticVol = 0.18 * masterVol;
+      activeHumVol = 0.03 * masterVol;
+      break;
+  }
 
   // 1. First, apply master FX (filter + reverb) on ALL system Web Audio (Rain, Forest, Cafe...)
   if (masterFX) {
@@ -775,38 +905,9 @@ export function updateRetroSimulation(active: boolean, effect: string, masterVol
     lp.frequency.cancelScheduledValues(now);
     reverbBlock.gain.cancelScheduledValues(now);
 
-    switch (effect) {
-      case "NORMAL":
-        hp.frequency.setValueAtTime(20, now);
-        lp.frequency.setValueAtTime(20000, now);
-        reverbBlock.gain.setValueAtTime(0, now);
-        break;
-      case "DISTANT":
-        hp.frequency.setValueAtTime(450, now);
-        lp.frequency.setValueAtTime(1400, now);
-        reverbBlock.gain.setValueAtTime(0.55, now);
-        break;
-      case "TV":
-        hp.frequency.setValueAtTime(550, now);
-        lp.frequency.setValueAtTime(2800, now);
-        reverbBlock.gain.setValueAtTime(0.12, now);
-        break;
-      case "MUFFLED":
-        hp.frequency.setValueAtTime(40, now);
-        lp.frequency.setValueAtTime(380, now);
-        reverbBlock.gain.setValueAtTime(0.05, now);
-        break;
-      case "REVERB":
-        hp.frequency.setValueAtTime(100, now);
-        lp.frequency.setValueAtTime(7500, now);
-        reverbBlock.gain.setValueAtTime(0.85, now);
-        break;
-      case "STATIC":
-        hp.frequency.setValueAtTime(750, now);
-        lp.frequency.setValueAtTime(3800, now);
-        reverbBlock.gain.setValueAtTime(0.15, now);
-        break;
-    }
+    hp.frequency.setValueAtTime(activeHpFreq, now);
+    lp.frequency.setValueAtTime(activeLpFreq, now);
+    reverbBlock.gain.setValueAtTime(activeReverbWet, now);
   }
 
   // 2. Clean up existing retro background generation layers

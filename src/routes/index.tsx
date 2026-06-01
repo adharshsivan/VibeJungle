@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { RAW_MAP_DATA } from "./world_map_data";
 import { RainyCanvas } from "./RainyCanvas";
+import FMEffectsGrid from "@/components/FMEffectsGrid";
 import {
   ensureStarted,
   setChannelVolume,
@@ -2282,56 +2283,13 @@ function Index() {
 
             {/* FM Effects Tab Content (Fills Space) */}
             {mixerTab === "effects" && (
-              <div className="flex flex-col gap-2.5 overflow-y-auto pr-1 flex-1 hidden-scrollbar">
-                {effects.map((e) => {
-                  const on = effect === e.id;
-                  const Icon = e.icon;
-                  return (
-                    <button
-                      key={e.id}
-                      onClick={() => setEffect(e.id)}
-                      className={`group flex items-start gap-3.5 p-3 rounded-xl border text-left transition-all duration-300 relative overflow-hidden cursor-pointer ${
-                        on
-                          ? "border-ember/70 text-foreground bg-ember/[0.04] shadow-[inset_0_0_12px_rgba(255,106,0,0.05)]"
-                          : "border-border/40 text-foreground/75 hover:text-foreground hover:border-border/80 bg-panel-deep/50 hover:bg-panel-deep/80"
-                      }`}
-                    >
-                      {/* Accent glow bar on the left */}
-                      {on && (
-                        <div className="absolute left-0 top-0 bottom-0 w-1 bg-ember shadow-[0_0_10px_#ff6a00]" />
-                      )}
-
-                      <div
-                        className={`p-2 rounded-lg transition-colors duration-200 ${
-                          on
-                            ? "bg-ember/15 text-ember shadow-[0_0_8px_rgba(255,106,0,0.2)]"
-                            : "bg-neutral-900/80 text-foreground/50 group-hover:text-foreground/80"
-                        }`}
-                      >
-                        <Icon className="h-4.5 w-4.5" strokeWidth={on ? 2 : 1.5} />
-                      </div>
-
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between">
-                          <span
-                            className={`text-xs font-mono font-bold tracking-wider ${on ? "text-ember" : "text-foreground"}`}
-                          >
-                            {e.label.toUpperCase()}
-                          </span>
-                          {on && (
-                            <span className="text-[8px] font-mono bg-ember/10 text-ember font-bold border border-ember/20 px-1.5 py-0.5 rounded tracking-widest leading-none">
-                              ACTIVE
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-[10px] text-foreground/50 mt-1 leading-relaxed">
-                          {e.desc}
-                        </p>
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
+              <FMEffectsGrid
+                effect={effect}
+                setEffect={setEffect}
+                playing={playing}
+                master={master}
+                muted={muted}
+              />
             )}
           </div>
         </aside>
