@@ -1,0 +1,8 @@
+{
+  "name": "Remix: Remix: Remix: Remix: Ambient World Radio",
+  "description": "An ambient world radio application.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
